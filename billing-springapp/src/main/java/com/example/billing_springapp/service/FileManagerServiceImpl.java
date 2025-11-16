@@ -7,13 +7,15 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 
 @Service
 public class FileManagerServiceImpl implements FileManagerService {
 
-    private static final String storageDir="C:\\projects\\BillingApp\\FILE_STORAGE";
+    private static final Path storagePath = Paths.get("FILE_STORAGE");
 
 
     @Override
@@ -21,55 +23,66 @@ public class FileManagerServiceImpl implements FileManagerService {
         if(file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is null or empty");
         }
-        File storage = new File(storageDir);
-        // Create folder if it doesn't exist
-        if (!storage.exists()) {
-            boolean created = storage.mkdirs();
-            if (!created) {
-                throw new IOException("Failed to create storage directory: " + storageDir);
-            }
+
+        // Create storage directory if it doesn't exist
+        if (!Files.exists(storagePath)) {
+            Files.createDirectories(storagePath);
         }
-        File targetFile = new File(storage, Objects.requireNonNull(file.getOriginalFilename()));
-        if(!Objects.equals(targetFile.getParent(),storageDir)){
+
+        Path targetPath = storagePath.resolve(Objects.requireNonNull(file.getOriginalFilename())).normalize();
+        // Security check: file must be inside storage directory
+        if (!targetPath.startsWith(storagePath)) {
             throw new SecurityException("Unsupported filename!");
         }
-        Files.copy(file.getInputStream(),targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        System.out.println("File uploaded to: " + targetFile.getAbsolutePath());
-        return targetFile.getAbsolutePath();
+
+        Files.copy(file.getInputStream(),targetPath, StandardCopyOption.REPLACE_EXISTING);
+        System.out.println("File uploaded to: " + targetPath.toAbsolutePath());
+        return targetPath.getFileName().toString();
     }
 
 
     @Override
-    public File downloadFile(String file) throws IOException {
-        if(file == null || file.isEmpty()) {
+    public File downloadFile(String fileName) throws IOException {
+        if (fileName == null || fileName.isEmpty()) {
             throw new IllegalArgumentException("File is null or empty");
         }
-        var fileToDownload = new File(storageDir,file);
-        if(!Objects.equals(fileToDownload.getParent(),storageDir)){
+
+        Path targetPath = storagePath.resolve(fileName).normalize();
+
+        if (!targetPath.startsWith(storagePath)) {
             throw new SecurityException("Unsupported filename!");
         }
-        if(!fileToDownload.exists()){
+
+        if (!Files.exists(targetPath)) {
             throw new FileNotFoundException("File not found!");
         }
-        return fileToDownload;
+
+        return targetPath.toFile();
     }
 
     @Override
-    public Boolean deleteFile(String file) throws IOException {
-        if(file == null || file.isEmpty()) {
+    public Boolean deleteFile(String fileName) throws IOException {
+        if (fileName == null || fileName.isEmpty()) {
             throw new IllegalArgumentException("File is null or empty");
         }
-        File fileToDelete = new File(storageDir, file);
-        if(!Objects.equals(fileToDelete.getParent(),storageDir)){
+
+        Path targetPath = storagePath.resolve(fileName).normalize();
+
+        if (!targetPath.startsWith(storagePath)) {
             throw new SecurityException("Unsupported filename!");
         }
-        if(!fileToDelete.exists()){
+
+        File fileToDelete = targetPath.toFile();
+
+        if (!fileToDelete.exists()) {
             throw new FileNotFoundException("File not found!");
         }
+
         boolean deleted = fileToDelete.delete();
         if (!deleted) {
             throw new IOException("Failed to delete file: " + fileToDelete.getAbsolutePath());
         }
+
         System.out.println("File deleted: " + fileToDelete.getAbsolutePath());
         return true;
     }
